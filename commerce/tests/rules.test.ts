@@ -1,0 +1,12 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {paise,quote,allocate,checkTransition} from '../lib/money.ts';
+import {validateContent} from '../lib/policy.ts';
+test('money stays in integer paise and rejects floating-point strings',()=>{assert.equal(paise('3499.50'),349950);assert.throws(()=>paise('1.234'));assert.throws(()=>paise('-1'));});
+test('inclusive GST is not charged twice',()=>{const q=quote([{price:'118.00',mrp:'150.00',gstRate:'18',quantity:2}]);assert.equal(q.subtotal,23600);assert.equal(q.tax,3600);assert.equal(q.total,31500);});
+test('discount allocation conserves every paise',()=>{assert.equal(allocate(100,[333,333,334]).reduce((a,b)=>a+b,0),100);});
+test('quantity and discounts cannot create negative orders',()=>{assert.throws(()=>quote([{price:100,mrp:100,gstRate:18,quantity:0}]));assert.throws(()=>quote([{price:100,mrp:100,gstRate:18,quantity:1}],10001));});
+test('vegetarian validation rejects prohibited terms across nested content',()=>{for(const word of ['eggs','chicken','fish','meat grinder','seafood','bacon'])assert.throws(()=>validateContent({images:[{alt:word}]},true));});
+test('vegetarian confirmation and image review are mandatory',()=>{assert.throws(()=>validateContent('Paneer air fryer',false));assert.throws(()=>validateContent('Paneer air fryer',true,false));validateContent('Dosa batter, paneer and vegetable soups',true);});
+test('fulfillment cannot skip shipping or resurrect cancelled orders',()=>{checkTransition('PACKED','SHIPPED');assert.throws(()=>checkTransition('PLACED','DELIVERED'));assert.throws(()=>checkTransition('CANCELLED','PROCESSING'));});
+test('restricted coupon never discounts ineligible lines',()=>{const q=quote([{price:100,mrp:100,gstRate:18,quantity:1},{price:100,mrp:100,gstRate:18,quantity:1}],999,false,[true,false]);assert.deepEqual(q.discounts,[999,0]);});
