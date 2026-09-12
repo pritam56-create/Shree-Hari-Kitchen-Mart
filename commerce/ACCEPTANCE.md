@@ -17,7 +17,12 @@
 
 ## Acceptance not yet established
 
-The requested 40-step end-to-end acceptance test has **not passed**. MySQL 8.4 has been provisioned on Railway with a persistent disk. The first application deployment is configured to run a real MySQL COD acceptance flow before starting. Its result must be verified from deployment logs. Razorpay credentials are not configured. Build success alone does not verify persistence or payments.
+The requested 40-step Razorpay end-to-end acceptance test has **not passed** because gateway credentials are not configured. The real MySQL COD acceptance flow **passed** on Railway deployment `98b820f0-531a-4da8-95da-d62b2a96abfe` on 2026-09-12. Logs confirmed migration, 37 seeded products, and the complete COD acceptance result before public startup.
+
+Verified against MySQL: customer registration/login/logout, wishlist/cart changes, coupon calculation, address storage, idempotent COD order creation, order and payment rows, inventory deduction, invoice creation/PDF output, customer/admin order retrieval, fulfillment through delivery and payment collection, verified review eligibility, customer support ticket, staff response and customer retrieval.
+
+Public staging: https://shree-hari-store-production.up.railway.app/
+The public health endpoint returned HTTP 200 with `database: mysql`. Browser checks confirmed the 37-product catalog and a category/price filter reducing it to one matching appliance.
 
 1. Provision MySQL 8 and run the generated migration against a clean staging database.
 2. Seed staging; exercise `mysql-acceptance.mjs` against a database ending in `_test` with `ALLOW_DATABASE_TESTS=1`, `TEST_BASE_URL`, `DATABASE_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
