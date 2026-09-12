@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {PrismaClient} from '@prisma/client';
+import {validateContent} from '../lib/policy.ts';
 const base=process.env.TEST_BASE_URL;
 const designatedStaging=process.env.COMMERCE_MODE==='staging'&&process.env.RUN_ACCEPTANCE==='1';
 if(process.env.ALLOW_DATABASE_TESTS!=='1'||!base||!process.env.DATABASE_URL||(!new URL(process.env.DATABASE_URL).pathname.endsWith('_test')&&!designatedStaging))throw new Error('Integration tests require an explicitly designated staging or test database.');
@@ -45,5 +46,24 @@ try{
  const ticket=(await request('support',{subject:'Acceptance support ticket',body:'Please confirm warranty details.'},customerCookie)).data;
  await request('admin/support',{id:ticket.id,body:'Please keep your invoice for warranty service.',status:'WAITING_CUSTOMER'},adminCookie);
  const tickets=(await request('support',undefined,customerCookie)).data;assert(tickets.find(t=>t.id===ticket.id).messages.some(m=>m.staff));
+ // Dedicated fixture forces allocation across warehouses without changing merchant stock.
+ const warehouse=await db.warehouse.create({data:{id:run.slice(0,30),name:'Acceptance secondary warehouse'}});
+ const fixtureContent={name:'Acceptance vegetable blender',description:'Vegetable smoothie preparation.',warranty:'Test only'};
+ validateContent(fixtureContent,true);
+ const fixture=await db.product.create({data:{...fixtureContent,slug:`acceptance-${run}`,categoryId:product.categoryId,brandId:product.brandId,active:true,vegetarianConfirmed:true,variants:{create:{sku:`TEST-${run}`,name:'Test variant',price:100,mrp:100,inventory:{create:[{warehouseId:'MAIN',quantity:1},{warehouseId:warehouse.id,quantity:2}]}}}},include:{variants:{include:{inventory:true}}}});
+ try{
+  const testVariant=fixture.variants[0];
+  await request('cart',{variantId:testVariant.id,quantity:3},customerCookie);
+  const cancelled=(await request('checkout',{addressId:address.id,code:'',delivery:'STANDARD',gateway:'COD',requestKey:randomUUID()},customerCookie)).data.order;
+  assert.equal((await db.inventory.aggregate({where:{variantId:testVariant.id},_sum:{quantity:true}}))._sum.quantity,0);
+  // Concurrent duplicate cancellation must restore inventory exactly once.
+  const attempts=await Promise.allSettled([1,2].map(()=>request('admin/orders/'+cancelled.id,{status:'CANCELLED',note:'Warehouse restoration test'},adminCookie)));
+  assert.equal(attempts.filter(result=>result.status==='fulfilled').length,1);
+  for(const original of testVariant.inventory){const restored=await db.inventory.findUniqueOrThrow({where:{id:original.id}});assert.equal(restored.quantity,original.quantity);assert.equal(restored.reserved,0);}
+  assert.equal(await db.inventoryMovement.count({where:{reference:cancelled.id,reason:'CANCELLATION'}}),2);
+  assert.equal(await db.orderStatusHistory.count({where:{orderId:cancelled.id,status:'CANCELLED'}}),1);
+  assert.equal((await db.payment.findUniqueOrThrow({where:{orderId:cancelled.id}})).status,'PENDING');
+  console.log('MySQL multi-warehouse cancellation and concurrent replay: PASSED');
+ }finally{await db.product.update({where:{id:fixture.id},data:{active:false}});}
  console.log('COD MySQL acceptance flow passed. Razorpay success/failure/webhook tests remain separate.');
 }finally{await db.$disconnect();}

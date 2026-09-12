@@ -174,7 +174,16 @@ async function handler(req:NextRequest,{params}:{params:Promise<{path:string[]}>
   return ok(await transaction(async tx=>{const order=await tx.order.findUniqueOrThrow({where:{id:resourceId},include:{items:true,payment:true}});checkTransition(order.status,v.status);
    if(v.status==='SHIPPED'){if(!v.carrier||!v.trackingNumber)throw new HttpError(400,'Carrier and tracking number required');await tx.shipment.create({data:{orderId:order.id,carrier:v.carrier,trackingNumber:v.trackingNumber,tracking:{create:{status:'SHIPPED',description:v.note||'Handed to carrier'}}}});}
    if(v.status==='DELIVERED'&&order.paymentMethod==='COD'){if(!v.codCollected)throw new HttpError(400,'Confirm cash was collected');await tx.payment.update({where:{orderId:order.id},data:{status:'CAPTURED'}});await tx.paymentTransaction.create({data:{paymentId:order.payment!.id,externalId:`cod-${order.id}`,kind:'COD_COLLECTION',amount:order.total}});}
-   if(v.status==='CANCELLED'&&!order.stockRestored){for(const item of order.items){const inv=await tx.inventory.findFirstOrThrow({where:{variantId:item.variantId}});await tx.inventory.update({where:{id:inv.id},data:{quantity:{increment:item.quantity}}});await tx.inventoryMovement.create({data:{inventoryId:inv.id,delta:item.quantity,reason:'CANCELLATION',reference:order.id,actorId:user.id}});}if(order.paymentStatus==='PAID')await tx.outbox.create({data:{kind:'CANCEL_REFUND',payload:json({orderId:order.id,paymentId:order.payment?.gatewayPaymentId})}});}
+   if(v.status==='CANCELLED'&&!order.stockRestored){
+    // Reverse the actual deductions, preserving their warehouse allocation.
+    const deductions=await tx.inventoryMovement.findMany({where:{reference:order.id,reason:'ORDER',delta:{lt:0}},include:{inventory:true},orderBy:{inventoryId:'asc'}});
+    const expected=new Map<string,number>();
+    for(const item of order.items)expected.set(item.variantId,(expected.get(item.variantId)||0)+item.quantity);
+    for(const deduction of deductions)expected.set(deduction.inventory.variantId,(expected.get(deduction.inventory.variantId)||0)+deduction.delta);
+    if(!deductions.length||[...expected.values()].some(quantity=>quantity!==0))throw new HttpError(409,'Original inventory deductions require reconciliation before cancellation');
+    for(const deduction of deductions){await tx.inventory.update({where:{id:deduction.inventoryId},data:{quantity:{increment:-deduction.delta}}});await tx.inventoryMovement.create({data:{inventoryId:deduction.inventoryId,delta:-deduction.delta,reason:'CANCELLATION',reference:order.id,actorId:user.id}});}
+    if(order.paymentStatus==='PAID')await tx.outbox.create({data:{kind:'CANCEL_REFUND',payload:json({orderId:order.id,paymentId:order.payment?.gatewayPaymentId})}});
+   }
    await tx.orderStatusHistory.create({data:{orderId:order.id,status:v.status,note:v.note,actorId:user.id}});await tx.notification.create({data:{userId:order.userId,title:`Order ${order.number}: ${v.status.replaceAll('_',' ')}`,body:v.note||'Your order status has changed.'}});
    return tx.order.update({where:{id:order.id},data:{status:v.status,...(v.status==='CANCELLED'?{stockRestored:true}:{}),...(v.status==='DELIVERED'&&order.paymentMethod==='COD'?{paymentStatus:'PAID'}:{})}});
   }));

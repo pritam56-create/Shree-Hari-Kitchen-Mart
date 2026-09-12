@@ -14,7 +14,7 @@ if(process.env.COMMERCE_MODE==='staging')await run(['--experimental-strip-types'
 
 if(process.env.COMMERCE_MODE==='staging'&&process.env.RUN_ACCEPTANCE==='1'){
   const db=new PrismaClient();
-  const tested=await db.siteSetting.findUnique({where:{key:'acceptance-cod-v1'}});
+  const tested=await db.siteSetting.findUnique({where:{key:'acceptance-cod-v2'}});
   if(!tested){
     const base='http://127.0.0.1:3099';
     const server=spawn(process.execPath,['node_modules/next/dist/bin/next','start','commerce','--hostname','127.0.0.1','--port','3099'],{stdio:'inherit',env:{...process.env,APP_URL:base}});
@@ -26,7 +26,7 @@ if(process.env.COMMERCE_MODE==='staging'&&process.env.RUN_ACCEPTANCE==='1'){
       }
       if(!ready)throw new Error('Acceptance server failed to become ready');
       await run(['commerce/tests/mysql-acceptance.mjs'],{TEST_BASE_URL:base,ALLOW_DATABASE_TESTS:'1'});
-      await db.siteSetting.create({data:{key:'acceptance-cod-v1',value:{passedAt:new Date().toISOString(),scope:'COD order, MySQL persistence, stock, PDF, fulfillment, verified review, support'}}});
+      await db.siteSetting.create({data:{key:'acceptance-cod-v2',value:{passedAt:new Date().toISOString(),scope:'COD order, MySQL persistence, stock, PDF, fulfillment, verified review, support, multi-warehouse cancellation and concurrent replay'}}});
       console.log('Initial MySQL COD acceptance: PASSED');
     }finally{server.kill('SIGTERM');}
   }
