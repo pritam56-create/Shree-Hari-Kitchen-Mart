@@ -2,6 +2,7 @@ import {createHash,randomBytes,timingSafeEqual,createHmac} from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import {NextRequest,NextResponse} from 'next/server';
 import {db,transaction} from './db';
+import {roleDefaults} from './permissions';
 export class HttpError extends Error { constructor(public status:number,message:string){super(message);} }
 export const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
 export const token=()=>randomBytes(32).toString('hex');
@@ -22,11 +23,11 @@ export function checkOrigin(req:NextRequest){
 export async function userFor(req:NextRequest,required=true){
  const raw=req.cookies.get('shk_session')?.value;
  const session=raw?await db.session.findUnique({where:{id:hash(raw)},include:{user:{include:{roles:true}}}}):null;
- if(!session||session.expiresAt<new Date()||session.user.disabled){if(required)throw new HttpError(401,'Please sign in');return null;}
+ if(!session||session.expiresAt<new Date()||session.user.disabled||session.user.roles.some(r=>r.roleId!=='CUSTOMER')){if(required)throw new HttpError(401,'Please sign in');return null;}
  return session.user;
 }
 export type Member=NonNullable<Awaited<ReturnType<typeof userFor>>>;
-export function requireAdmin(user:Member,superOnly=false){if(!user.roles.some(r=>r.roleId==='SUPER_ADMIN'||(!superOnly&&r.roleId==='ADMIN')))throw new HttpError(403,'Administrator access required');}
+export function requireAdmin(user:Member,superOnly=false){if(!user.roles.some(r=>r.roleId==='SUPER_ADMIN'||(!superOnly&&r.roleId in roleDefaults)))throw new HttpError(403,'Administrator access required');}
 export async function sessionResponse(userId:string,remember=false){
  const raw=token(),age=remember?60*60*24*30:60*60*12;
  await db.session.create({data:{id:hash(raw),userId,expiresAt:new Date(Date.now()+age*1000)}});

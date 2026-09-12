@@ -3,7 +3,8 @@ import {db,transaction,json} from './db';
 import {HttpError} from './security';
 import {paise,rupees,quote} from './money';
 import {razorpay} from './payments';
-export const productInclude={category:true,brand:true,images:true,specifications:true,variants:{include:{inventory:true}},reviews:{where:{status:'APPROVED'},select:{rating:true,title:true,body:true,verified:true}}} satisfies Prisma.ProductInclude;
+export const productInclude={category:true,brand:true,images:true,specifications:true,variants:{where:{active:true},include:{inventory:true}},reviews:{where:{status:'APPROVED'},select:{rating:true,title:true,body:true,verified:true}}} satisfies Prisma.ProductInclude;
+export const adminProductInclude={...productInclude,variants:{include:{inventory:true}}} satisfies Prisma.ProductInclude;
 export async function releaseExpired(){
  await transaction(async tx=>{
   const rows=await tx.reservation.findMany({where:{released:false,expiresAt:{lt:new Date()}},take:200});

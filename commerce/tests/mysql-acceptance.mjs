@@ -16,7 +16,7 @@ try{
  await request('auth/logout',{},customerCookie);
  customerCookie=(await request('auth/login',{email,password})).cookie;
  const me=(await request('auth/me',undefined,customerCookie)).data;
- adminCookie=(await request('auth/login',{email:process.env.ADMIN_EMAIL,password:process.env.ADMIN_PASSWORD})).cookie;
+ adminCookie=(await request('admin/auth/login',{email:process.env.ADMIN_EMAIL,password:process.env.ADMIN_PASSWORD})).cookie;
  await request('admin/delivery',{enabled:true,pinCodes:['395006'],standardDays:'5–7 business days',expressDays:'2–4 business days'},adminCookie);
  const products=(await request('products?q=Mixer&sort=price-asc&max=10000')).data;assert(products.length);
  const product=(await request('products/'+products[0].slug)).data,variant=product.variants[0];
@@ -46,6 +46,21 @@ try{
  const ticket=(await request('support',{subject:'Acceptance support ticket',body:'Please confirm warranty details.'},customerCookie)).data;
  await request('admin/support',{id:ticket.id,body:'Please keep your invoice for warranty service.',status:'WAITING_CUSTOMER'},adminCookie);
  const tickets=(await request('support',undefined,customerCookie)).data;assert(tickets.find(t=>t.id===ticket.id).messages.some(m=>m.staff));
+ const delivered=(await request('orders/'+placed.id,undefined,customerCookie)).data;
+ const returned=(await request('returns',{orderId:placed.id,reason:'Acceptance return inspection',resolution:'REFUND',items:[{orderItemId:delivered.items[0].id,quantity:1}]},customerCookie)).data;
+ await request('admin/returns',{id:returned.id,status:'APPROVED',note:'Acceptance approval'},adminCookie);
+ await request('admin/returns',{id:returned.id,status:'RECEIVED',note:'Acceptance inspection completed',restock:true},adminCookie);
+ const refund=(await request('admin/refunds',{returnId:returned.id},adminCookie)).data;
+ assert.equal(refund.status,'AWAITING_MANUAL_TRANSFER');
+ const recorded={action:'manual-complete',id:refund.id,reference:'TEST-'+run,confirmTransferred:true,currentPassword:process.env.ADMIN_PASSWORD};
+ await request('admin/refunds',recorded,adminCookie);
+ await request('admin/refunds',recorded,adminCookie);
+ assert.equal(await db.paymentTransaction.count({where:{paymentId:payment.id,kind:'MANUAL_REFUND'}}),1);
+ const customerReturns=(await request('returns',undefined,customerCookie)).data;
+ assert.equal(customerReturns.find(r=>r.id===returned.id).refund.status,'COMPLETED');
+ assert.equal((await db.inventory.aggregate({where:{variantId:variant.id},_sum:{quantity:true}}))._sum.quantity,before._sum.quantity-1);
+ assert.equal(await db.orderStatusHistory.count({where:{orderId:placed.id,status:'REFUND_COMPLETED'}}),1);
+ console.log('MySQL return/restock and idempotent sandbox bank-transfer record: PASSED (no real funds sent)');
  // Dedicated fixture forces allocation across warehouses without changing merchant stock.
  const warehouse=await db.warehouse.create({data:{id:run.slice(0,30),name:'Acceptance secondary warehouse'}});
  const fixtureContent={name:'Acceptance vegetable blender',description:'Vegetable smoothie preparation.',warranty:'Test only'};
