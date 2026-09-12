@@ -1,6 +1,6 @@
 # Release status — incomplete
 
-## Implemented source, requiring MySQL integration verification
+## Implemented source — core COD workflow verified against MySQL
 
 - MySQL-only Prisma relational schema, generated migration and database-level checks.
 - Bcrypt password hashing; cookie sessions; customer, admin and super-admin roles; password change and reset-token endpoints.
@@ -14,6 +14,7 @@
 - Admin product edit/create/disable, reviewed-image metadata, categories, brands, stock adjustments, orders/statuses, customers, coupons, delivery coverage and business settings.
 - Delivered/paid verified-review eligibility, moderation, support tickets and staff responses.
 - Return request/approval/receipt/restocking, Razorpay refund submission and reconciliation states.
+- Cancellation reverses the original warehouse-level inventory movements inside the order transaction. Missing or inconsistent deduction records block cancellation instead of inventing a warehouse allocation.
 
 ## Acceptance not yet established
 
@@ -23,6 +24,10 @@ Verified against MySQL: customer registration/login/logout, wishlist/cart change
 
 Public staging: https://shree-hari-store-production.up.railway.app/
 The public health endpoint returned HTTP 200 with `database: mysql`. Browser checks confirmed the 37-product catalog and a category/price filter reducing it to one matching appliance.
+
+On 2026-09-12, deployment `79a0331c-42fd-4cae-9294-a8e32584ca2a` ran commit `00eca48c42b983c3a188abee6809c4bef6a3a311` and passed the expanded MySQL acceptance suite. A dedicated test appliance held one unit in one warehouse and two in another. Checkout deducted all three, and simultaneous cancellation requests restored each warehouse exactly once, produced one cancellation history entry, and kept the unpaid COD payment pending. The fixture was disabled after the test. Eight local rules tests and the production build also passed. Razorpay remains unverified.
+
+Deployment note: Railway's redeploy operation rebuilds the previous deployment's commit. Use a fresh source deployment with the intended commit SHA, and verify the deployment metadata and runtime acceptance logs.
 
 1. Provision MySQL 8 and run the generated migration against a clean staging database.
 2. Seed staging; exercise `mysql-acceptance.mjs` against a database ending in `_test` with `ALLOW_DATABASE_TESTS=1`, `TEST_BASE_URL`, `DATABASE_URL`, `ADMIN_EMAIL` and `ADMIN_PASSWORD`.
@@ -37,7 +42,7 @@ The public health endpoint returned HTTP 200 with `database: mysql`. Browser che
 - Mobile OTP login, email/phone verification delivery, email/SMS provider workers and password-reset email delivery. Reset and order notifications are stored in the outbox; no sender runs yet.
 - Automatic captured-payment reconciliation, expiration scheduling, cancelled-paid-order refunds, provider refund-status polling/webhooks and completed-refund order histories. These currently require further implementation, not just credentials.
 - COD bank-refund reference/proof handling and replacement fulfillment.
-- Full multi-variant/specification editing, hard deletion/duplication, warehouse administration and inventory-restoration routing to the original warehouse.
+- Full multi-variant/specification editing, hard deletion/duplication and warehouse administration. Cancellation now preserves the original warehouse allocation; returned-item warehouse routing still needs implementation.
 - Wishlist sharing, helpful/reported reviews, review/return/support file uploads, customer questions/answers presentation and moderation.
 - Loyalty, referrals, recently viewed, search-history/trending/typo tolerance, gift cards, subscriptions and cart recovery.
 - CMS banners/blog/promotions, extended analytics/revenue charts/conversion metrics and all requested ancillary schema tables.
