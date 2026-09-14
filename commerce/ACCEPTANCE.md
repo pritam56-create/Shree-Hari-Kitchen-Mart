@@ -15,8 +15,15 @@
 - Delivered/paid verified-review eligibility, moderation, support tickets and staff responses.
 - Return request/approval/receipt/restocking, Razorpay refund submission and reconciliation states.
 - Cancellation reverses the original warehouse-level inventory movements inside the order transaction. Missing or inconsistent deduction records block cancellation instead of inventing a warehouse allocation.
+- Private `/admin/login`, separate staff sessions, server page guards, granular role grants, staff account management, session revocation and redacted audit/security logs.
+- Additional variant/specification editing, unpublished duplication, warehouse management and transactional stock transfers.
+- Scheduled banner/homepage/blog/offer publication, product answers, staff search/work queue, payment records and sales CSV reports.
+- Scheduled inventory-hold expiry and Resend outbox processing (delivery requires configured credentials).
+- Original-warehouse return restocking and idempotent recording of completed COD bank transfers, with customer-visible refund history. Recording a transfer does not initiate a transfer.
 
 ## Acceptance not yet established
+
+The expanded private-admin and COD suites **passed on 2026-09-14**, deployment `3044c265-64dd-47af-88c7-d2974f336fe0`, commit `fb2a00d12d08e2a817b6069b7ae4c5c7d78a9c9e`. Railway logs confirmed the additive migration, preserved seed data, return/restock and idempotent sandbox transfer-record tests, concurrent cancellation protection, and the private admin suite: separate sessions, RBAC, CSRF, staff revocation, catalog changes, stock transfers, publishing and redacted audit. No real funds were transferred by these tests. The live private login is `/admin/login`.
 
 The requested 40-step Razorpay end-to-end acceptance test has **not passed** because gateway credentials are not configured. The real MySQL COD acceptance flow **passed** on Railway deployment `98b820f0-531a-4da8-95da-d62b2a96abfe` on 2026-09-12. Logs confirmed migration, 37 seeded products, and the complete COD acceptance result before public startup.
 
@@ -39,13 +46,13 @@ Deployment note: Railway's redeploy operation rebuilds the previous deployment's
 
 ## Known missing features — do not advertise these as complete
 
-- Mobile OTP login, email/phone verification delivery, email/SMS provider workers and password-reset email delivery. Reset and order notifications are stored in the outbox; no sender runs yet.
-- Automatic captured-payment reconciliation, expiration scheduling, cancelled-paid-order refunds, provider refund-status polling/webhooks and completed-refund order histories. These currently require further implementation, not just credentials.
-- COD bank-refund reference/proof handling and replacement fulfillment.
-- Full multi-variant/specification editing, hard deletion/duplication and warehouse administration. Cancellation now preserves the original warehouse allocation; returned-item warehouse routing still needs implementation.
-- Wishlist sharing, helpful/reported reviews, review/return/support file uploads, customer questions/answers presentation and moderation.
+- Mobile OTP login, email/phone verification delivery and SMS integration. Resend outbox processing exists; real password-reset/order-email delivery is unverified without credentials.
+- Automatic captured-payment reconciliation, cancelled-paid-order refunds and provider refund-status polling. Signed processed-refund webhooks append completion history, but the real gateway flow is not yet tested.
+- Bank transfer proof-file uploads and replacement fulfillment. COD transfer references can be recorded after staff confirmation.
+- Remaining product metadata, bulk operations/import/export, hard deletion policies and richer category/brand management.
+- Wishlist sharing, helpful/reported reviews, review/return/support file uploads and question moderation. Staff answers are now presented on product pages.
 - Loyalty, referrals, recently viewed, search-history/trending/typo tolerance, gift cards, subscriptions and cart recovery.
-- CMS banners/blog/promotions, extended analytics/revenue charts/conversion metrics and all requested ancillary schema tables.
+- Extended reporting/conversion/profit metrics and all remaining ancillary schema tables. Basic CMS publication and sales reporting exist.
 - Stripe/EMI adapters, image storage integration and logistics tracking API synchronization. Configuration names alone are not working integrations.
 - Guest checkout without registration; guest cart is supported, but checkout currently requires an account.
 - Product imagery, complete requested route coverage, final visual polish, SEO metadata per product and PWA/offline behavior.
